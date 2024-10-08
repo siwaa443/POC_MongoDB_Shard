@@ -1,0 +1,137 @@
+/----------------------------- 1. docker-compose -f mongo/docker-compose.yaml up -d ------------------------------------/
+
+/----------------------------- 2. connect config to in initiate -------------------------------------
+docker exec -it configsvr1 mongosh
+rs.initiate(
+  {
+    _id: "config_rs",
+    configsvr: true,
+    members: [
+      { _id : 0, host : "configsvr1:27017" },
+      { _id : 1, host : "configsvr2:27017" },
+      { _id : 2, host : "configsvr3:27017" }
+    ]
+  }
+)
+rs.status()
+
+/----------------------------- 3. connect Shard to in initiate -------------------------------------
+
+rs.initiate({
+  _id: "shard1_rs",
+  members: [
+    { _id: 0, host: "shardsvr1_1:27017" },
+    { _id: 1, host: "shardsvr1_2:27017" },
+    { _id: 2, host: "shardsvr1_3:27017" }
+  ]
+})
+
+rs.initiate({
+  _id: "shard2_rs",
+  members: [
+    { _id: 0, host: "shardsvr2_1:27017" },
+    { _id: 1, host: "shardsvr2_2:27017" },
+    { _id: 2, host: "shardsvr2_3:27017" }
+  ]
+})
+
+rs.initiate({
+  _id: "shard3_rs",
+  members: [
+    { _id: 0, host: "shardsvr3_1:27017" },
+    { _id: 1, host: "shardsvr3_2:27017" },
+    { _id: 2, host: "shardsvr3_3:27017" }
+  ]
+})
+
+rs.initiate({
+  _id: "shard4_rs",
+  members: [
+    { _id: 0, host: "shardsvr4_1:27017" },
+    { _id: 1, host: "shardsvr4_2:27017" },
+    { _id: 2, host: "shardsvr4_3:27017" }
+  ]
+})
+
+rs.initiate({
+  _id: "shard5_rs",
+  members: [
+    { _id: 0, host: "shardsvr5_1:27017" },
+    { _id: 1, host: "shardsvr5_2:27017" },
+    { _id: 2, host: "shardsvr5_3:27017" }
+  ]
+})
+
+rs.initiate({
+  _id: "shard9_rs",
+  members: [
+    { _id: 0, host: "shardsvr9_1:27017" },
+    { _id: 1, host: "shardsvr9_2:27017" },
+    { _id: 2, host: "shardsvr9_3:27017" }
+  ]
+})
+
+/----------------------------- 4. Add Shard to the cluster -------------------------------------
+
+docker exce -it mongos mongosh
+
+sh.addShard("shard1_rs/shardsvr1_1:27017,shardsvr1_2:27017,shardsvr1_3:27017")
+sh.addShard("shard2_rs/shardsvr2_1:27017,shardsvr2_2:27017,shardsvr2_3:27017")
+sh.addShard("shard3_rs/shardsvr3_1:27017,shardsvr3_2:27017,shardsvr3_3:27017")
+sh.addShard("shard4_rs/shardsvr4_1:27017,shardsvr4_2:27017,shardsvr4_3:27017")
+sh.addShard("shard5_rs/shardsvr5_1:27017,shardsvr5_2:27017,shardsvr5_3:27017")
+
+sh.addShard("shard6_rs/shardsvr6_1:27017,shardsvr6_2:27017,shardsvr6_3:27017")
+sh.addShard("shard7_rs/shardsvr7_1:27017,shardsvr7_2:27017,shardsvr7_3:27017")
+sh.addShard("shard8_rs/shardsvr8_1:27017,shardsvr8_2:27017,shardsvr8_3:27017")
+sh.addShard("shard9_rs/shardsvr9_1:27017,shardsvr9_2:27017,shardsvr9_3:27017")
+sh.addShard("shard10_rs/shardsvr10_1:27017,shardsvr10_2:27017,shardsvr10_3:27017")
+mongos> sh.status()
+
+sh.enableSharding("sharddb")
+sh.shardCollection("sharddb.dev_bulknormal_report", { "smId": "hashed" })
+
+use config
+
+db.settings.update(
+   { _id: "chunksize" },
+   { $set: { value: 1 } },
+   { upsert: true }
+)
+
+db.dev_bulknormal_report.getShardDistribution()
+
+การคำนวณ:
+
+จำนวน chunks ทั้งหมดที่ต้องการ = 9 shards * 3 chunks = 27 chunks
+ปริมาณข้อมูลที่ต้องการ = 27 chunks * 64 MB = 1,728 MB หรือประมาณ 1.7 GB
+
+function generateRandomSmId() {
+    const chars = '0123456789ABCDEF';
+    let result = '';
+    for (let i = 0; i < 24; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+ 
+function generateRandomBNumber() {
+    return '66' + Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
+}
+ 
+const profiles = ['AIS-TEST', 'SHARD-TEST', 'UBO-TEST'];
+ 
+for (let i = 0; i < 500000; i++) {
+    db.dev_bulknormal_report.insertOne({
+        bNumber: generateRandomBNumber(),
+        profileId: profiles[Math.floor(Math.random() * profiles.length)],
+        smId: generateRandomSmId(),
+        testField: "Data " + i
+    });
+ 
+    if (i % 1000 === 0) {
+        print(`Inserted ${i} documents`);
+    }
+}
+ 
+print("Insertion complete");
